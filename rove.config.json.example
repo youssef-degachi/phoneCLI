@@ -1,0 +1,21 @@
+{
+  "projects": [
+    {
+      "id": "rove-demo",
+      "name": "Rove Demo",
+      "path": ".",
+      "devCommand": "npm run dev",
+      "devPort": 3000,
+      "color": "#6366f1"
+    }
+  ],
+  "allowedPaths": [
+    "."
+  ],
+  "tunnel": {
+    "mode": "quick",
+    "autoRestart": true,
+    "restartDelayMs": 3000,
+    "maxRestarts": 10
+  }
+}

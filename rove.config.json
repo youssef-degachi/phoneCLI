@@ -1,0 +1,20 @@
+{
+    "projects": [
+        {
+            "id": "rove-client",
+            "name": "Rove Client",
+            "path": "/home/youssef/youssef/project/contrall-pc-from-mobile/client",
+            "devCommand": "pnpm dev",
+            "devPort": 3000
+        }
+    ],
+    "allowedPaths": [
+        "."
+    ],
+    "tunnel": {
+        "mode": "quick",
+        "autoRestart": true,
+        "restartDelayMs": 1000,
+        "maxRestarts": 5
+    }
+}
