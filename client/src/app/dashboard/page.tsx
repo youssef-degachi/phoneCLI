@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
-import { Terminal, Settings, Layout, Search, Activity, Cpu, HardDrive } from 'lucide-react';
+import { Terminal, Settings, Layout, Search, Activity, Cpu, HardDrive, Monitor } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DashboardPage() {
@@ -116,6 +116,10 @@ export default function DashboardPage() {
                     <Link href="/terminal" className="flex flex-col items-center space-y-1 hover:text-white transition-colors">
                         <Terminal className="h-6 w-6" />
                         <span className="text-[10px] uppercase font-bold">Term</span>
+                    </Link>
+                    <Link href="/screen" className="flex flex-col items-center space-y-1 hover:text-white transition-colors">
+                        <Monitor className="h-6 w-6 text-brand-500" />
+                        <span className="text-[10px] uppercase font-bold">Screen</span>
                     </Link>
                     <Link href="/ai" className="flex flex-col items-center space-y-1 hover:text-white transition-colors">
                         <BotIcon className="h-6 w-6" />

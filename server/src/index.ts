@@ -16,6 +16,7 @@ import { fileRoutes } from './files/files.routes.js';
 import { aiWs } from './ai/ai.ws.js';
 import { proxyRoutes } from './proxy/proxy.routes.js';
 import { systemRoutes } from './system/system.routes.js';
+import { screenRoutes } from './system/screen.routes.js';
 
 const fastify = Fastify({
     logger: {
@@ -67,6 +68,7 @@ fastify.register(fileRoutes, { prefix: '/api/files' });
 fastify.register(aiWs);
 fastify.register(proxyRoutes);
 fastify.register(systemRoutes, { prefix: '/api/system' });
+fastify.register(screenRoutes, { prefix: '/api/system/screen' });
 
 // Health check
 fastify.get('/health', async () => ({

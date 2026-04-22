@@ -1,200 +1,233 @@
-# Remote Screen View — Full Technical Plan
+# Remote Screen View — Final Technical Plan
 
-Control your PC from your phone as if it were in your hands.
-Click, type, switch apps, and see your real desktop — scaled to fit your screen.
-
----
-
-## What We're Building
-
-A new **"Screen" tab** in Rove that:
-- Shows your PC's desktop live on your phone.
-- Lets you **tap to click** and **type** on a virtual keyboard.
-- Has **two modes**: Polling (every 5s, saves data) and Live (real-time).
-- Supports **multiple monitors** — you can switch between them.
-- Pressing "Screen" when already on the Screen page opens an **App Switcher** (like the Windows taskbar or macOS Expose) showing all open windows.
+See, click, scroll, drag, and type on your PC from any device.
 
 ---
 
-## Key Fact: Your Setup
-Detected resolution: **4480×1080 px** (dual monitor, each 2240×1080).
-Tools available on your PC:
-- `gnome-screenshot` — takes screenshots
-- `import` (ImageMagick) — fast screen capture
-- `xdotool` — simulates mouse and keyboard
-- `ffmpeg` — encodes live video stream
+## Confirmed Features (Based on Decisions)
+
+| Feature | Decision |
+|---|---|
+| View screen | ✅ Yes |
+| Click | ✅ Yes |
+| Scroll (swipe = scroll wheel) | ✅ Yes |
+| Right-click (long press) | ✅ Yes |
+| Drag (press-hold + move) | ✅ Yes |
+| Custom on-screen keyboard | ✅ Yes (not phone's default) |
+| Keyboard auto-show | ✅ Yes, when tapping text fields |
+| FPS selector | ✅ Yes, selectable per device |
+| Monitor switcher | ✅ Yes |
+| App Switcher (all windows) | ✅ Yes |
+| Cross-platform (Linux/Mac/Win) | ✅ Yes |
+| Device-aware UI scaling | ✅ Yes (auto-detects phone/tablet/mini-PC) |
+| Re-auth before interaction | ❌ No (just on first login) |
+
+---
+
+## Cross-Platform Backend Strategy
+
+The tricky part is **Arch Linux, macOS, and Windows all have different tools.**
+The backend detects the OS and uses the right tool automatically.
+
+```
+OS Detection → platform = process.platform
+  'linux'  → use xdotool, import, ffmpeg, wmctrl
+  'darwin' → use screencapture, cliclick, ffmpeg, osascript
+  'win32'  → use nircmd, powershell, ffmpeg
+```
+
+### Linux (Arch)
+```bash
+# Screenshot
+import -window root -crop 2240x1080+0+0 /tmp/screen.jpg
+
+# Mouse click
+xdotool mousemove 960 540 click 1
+
+# Right-click
+xdotool mousemove 960 540 click 3
+
+# Scroll down
+xdotool mousemove 960 540 click 5      # 4 = scroll up, 5 = scroll down
+
+# Drag (mousedown → move → mouseup)
+xdotool mousemove X1 Y1 mousedown 1 mousemove X2 Y2 mouseup 1
+
+# Type text
+xdotool type "hello"
+
+# Special key
+xdotool key Return
+
+# List windows
+wmctrl -l
+
+# Live stream
+ffmpeg -video_size 2240x1080 -offset_x 0 -framerate 15 -f x11grab :0.0 -vf scale=960:-1 -vcodec mjpeg -f image2pipe pipe:1
+```
+
+### macOS
+```bash
+# Screenshot
+screencapture -x /tmp/screen.jpg
+
+# Mouse click
+cliclick c:960,540
+
+# Right-click
+cliclick rc:960,540
+
+# Scroll
+cliclick dd:960,540    # + osascript scroll events
+
+# List windows
+osascript -e 'tell application "System Events" to get name of every window of every process'
+
+# Live stream
+ffmpeg -f avfoundation -i "1" -vf scale=960:-1 -vcodec mjpeg -f image2pipe pipe:1
+```
+
+### Windows
+```bash
+# Screenshot + Live stream
+ffmpeg -f gdigrab -i desktop -vf scale=960:-1 -vcodec mjpeg -f image2pipe pipe:1
+
+# Mouse click
+nircmd.exe sendmouse 960 540 left click
+
+# List windows
+powershell "Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | Select MainWindowTitle"
+```
 
 ---
 
 ## Architecture
 
 ```
-Phone Browser
-     │
-     ├─ HTTP (Polling Mode): GET /api/system/screen/capture?monitor=0
-     │       Backend runs gnome-screenshot → sends JPEG → browser shows as <img>
-     │       Repeats every 5 seconds
-     │
-     ├─ WebSocket (Live Mode): /ws/screen?monitor=0
-     │       Backend runs ffmpeg in a loop → encodes JPEG frames → sends as base64
-     │       Browser renders each frame to a <canvas> at ~10fps
-     │
-     ├─ Touch Event Translations:
-     │       User taps at (200, 400) on phone
-     │       Phone display is 390×844
-     │       Monitor is 2240×1080
-     │       → PC click at: x = (200/390)*2240 = 1149, y = (400/844)*1080 = 512
-     │       → POST /api/system/screen/interact { type: "click", x: 1149, y: 512 }
-     │       → Backend runs: xdotool mousemove 1149 512 click 1
-     │
-     └─ App Switcher: GET /api/system/screen/windows
-             Backend runs: xdotool search --name "" getwindowname
-             Returns list of open windows
-             User taps one → POST /api/system/screen/focus { windowId: "..." }
+Phone/Tablet/Mini-PC Browser
+         │
+         │  ← Backend auto-detects OS on startup
+         │
+         ├── GET /api/system/screen/info
+         │     Returns: { monitors: [{w, h, offset}], os, defaultFps }
+         │     Client reads this and scales coordinates correctly
+         │
+         ├── GET /api/system/screen/capture?monitor=0&quality=80
+         │     Returns JPEG image buffer
+         │     Used in Polling mode (every N seconds you set)
+         │
+         ├── WebSocket /ws/screen?monitor=0&fps=15&token=...
+         │     Backend runs ffmpeg → pipes JPEG frames → sends as binary
+         │     Used in Live mode
+         │
+         ├── POST /api/system/screen/interact
+         │     Body: { type, x, y, dx?, dy?, text?, key? }
+         │     type = 'click' | 'rightclick' | 'scroll' | 'dragstart' | 'dragmove' | 'dragend' | 'type' | 'key'
+         │
+         ├── GET /api/system/screen/windows
+         │     Returns: [{ id, title, pid, app }]
+         │
+         └── POST /api/system/screen/focus
+               Body: { windowId: "..." }
 ```
 
 ---
 
-## Backend Plan
+## Coordinate Translation
 
-### New Files
-
-#### `server/src/screen/screen.service.ts`
-Responsible for all interaction with your PC's display.
+The phone doesn't know the PC screen size. The backend sends it on load.
 
 ```typescript
-// Take a screenshot of a specific monitor (0 = left, 1 = right)
-captureMonitor(monitor: number): Promise<Buffer>  // returns JPEG buffer
+// On page load:
+const { monitors } = await api.get('/system/screen/info')
+const monitor = monitors[selectedMonitor]  // e.g. { w: 2240, h: 1080, offsetX: 0 }
 
-// Get list of all open windows (for the App Switcher)
-getOpenWindows(): Promise<{ id: string, title: string, pid: number }[]>
+// On touch:
+const rect = screenContainer.getBoundingClientRect()
+const relX = (touchX - rect.left) / rect.width    // 0.0 to 1.0
+const relY = (touchY - rect.top) / rect.height    // 0.0 to 1.0
 
-// Click at a specific coordinate on the PC
-sendClick(x: number, y: number, button?: 1|2|3): Promise<void>  // xdotool click
-
-// Move mouse (for hover/drag)
-sendMouseMove(x: number, y: number): Promise<void>
-
-// Type text
-sendType(text: string): Promise<void>  // xdotool type
-
-// Press a special key (Enter, Escape, Ctrl+C, etc.)
-sendKey(key: string): Promise<void>  // xdotool key
-
-// Focus a window by its ID
-focusWindow(windowId: string): Promise<void>
+// Real PC coordinates
+const pcX = Math.round(relX * monitor.w) + monitor.offsetX
+const pcY = Math.round(relY * monitor.h)
 ```
 
-**Screenshot command (Polling):**
-```bash
-import -window root -crop 2240x1080+0+0 +repage /tmp/screen_0.jpg   # Monitor 0 (left)
-import -window root -crop 2240x1080+2240+0 +repage /tmp/screen_1.jpg # Monitor 1 (right)
-```
-
-**Live streaming (WebSocket):**
-```bash
-ffmpeg -video_size 2240x1080 -offset_x 0 -framerate 10 -f x11grab :0.0 \
-  -vf scale=960:-1 -vcodec mjpeg -f image2pipe pipe:1
-# Sends JPEG frames to stdout → we read them and send over WebSocket
-```
-
-#### `server/src/screen/screen.routes.ts`
-API endpoints exposed by the backend.
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/system/screen/capture` | Returns a JPEG screenshot. Query: `?monitor=0` |
-| `GET` | `/api/system/screen/windows` | Returns list of open windows |
-| `POST` | `/api/system/screen/interact` | Send click/key/type events |
-| `POST` | `/api/system/screen/focus` | Focus a window by ID |
-| `WS` | `/ws/screen` | Live frame stream. Query: `?monitor=0&token=...` |
+This works for **any device** — phone, tablet, mini-PC — because it always uses percentages, never fixed pixels.
 
 ---
 
-## Frontend Plan
+## Frontend — Screen Page UI
 
-### New File: `client/src/app/screen/page.tsx`
-
-#### Layout
 ```
-┌─────────────────────────┐
-│  [← Back]  Monitor: [0][1]  [Polling | Live]  │   ← Top bar
-├─────────────────────────┤
-│                         │
-│   PC screen here        │   ← Main view (scaled)
-│   (touches converted    │
-│    to PC coordinates)   │
-│                         │
-├─────────────────────────┤
-│  [⌨ Keyboard]  [Apps ⊞]  │   ← Bottom toolbar
-└─────────────────────────┘
+┌──────────────────────────────────────────┐
+│ ← Back   [Mon 0] [Mon 1]   [⚡ Live ▼]  │  ← Top bar
+├──────────────────────────────────────────┤
+│                                          │
+│   PC screen goes here                   │  ← Scaled to fit
+│   (touch events translated to PC coords)│
+│                                          │
+├──────────────────────────────────────────┤
+│  [⌨]  [Apps ⊞]  Polling: [5s ▼]        │  ← Bottom bar
+└──────────────────────────────────────────┘
 ```
 
-#### Coordinate Translation (the most important part)
-```typescript
-// When user taps the screen container:
-const handleTouch = (e: TouchEvent) => {
-  const rect = containerRef.current.getBoundingClientRect();
-  // Where on the displayed image did they tap? (0.0 to 1.0)
-  const relX = (e.touches[0].clientX - rect.left) / rect.width;
-  const relY = (e.touches[0].clientY - rect.top) / rect.height;
-  
-  // Translate to real PC coordinates
-  const pcX = Math.round(relX * PC_MONITOR_WIDTH);   // e.g. 2240
-  const pcY = Math.round(relY * PC_MONITOR_HEIGHT);  // e.g. 1080
-  
-  api.post('/system/screen/interact', { type: 'click', x: pcX, y: pcY });
-};
-```
-
-#### Mode Toggle
-- **Polling Mode**: Every 5 seconds, fetch the image endpoint and update an `<img src>`.
-- **Live Mode**: Open a WebSocket to `/ws/screen`, receive base64 frames, draw them on a `<canvas>`.
-
-#### App Switcher (Bottom "Apps" button)
-- Calls `GET /api/system/screen/windows`.
-- Shows a grid/list of window titles.
-- Tapping one calls `POST /api/system/screen/focus`.
-- Also accessible by tapping "Screen" in the nav bar when already on the screen.
-
-#### Virtual Keyboard
-- Shows a simple text input popup.
-- On submit, calls `POST /api/system/screen/interact` with `{ type: 'type', text: '...' }`.
-- Also supports special keys: `Enter`, `Escape`, `Tab`, `Ctrl+C`, `Ctrl+V`, etc.
-
----
-
-## Implementation Order
-
-1. `screen.service.ts` — screenshot + xdotool functions.
-2. `screen.routes.ts` — REST endpoints (polling first, then WS).
-3. `screen/page.tsx` — UI with image display and touch handling.
-4. Add "Screen" button to the nav bar in `dashboard/page.tsx`.
-5. Add App Switcher modal.
-6. Add Live Streaming via WebSocket + `ffmpeg`.
-7. Add monitor switcher (for your dual-monitor setup).
-
----
-
-## Things to Install
-```bash
-# For listing open windows in the App Switcher:
-sudo apt install wmctrl
-
-# (ffmpeg and xdotool are already installed ✅)
-```
-
----
-
-## Quick Summary
-
-| Capability | How |
+### Touch Gesture Mapping
+| Phone Gesture | PC Action |
 |---|---|
-| See screen | `gnome-screenshot` / `ffmpeg` |
-| Click on screen | `xdotool mousemove X Y click 1` |
-| Type text | `xdotool type "text"` |
-| Press keys | `xdotool key Return` |
-| Switch apps | `wmctrl -l` then `xdotool windowfocus` |
-| Switch monitor | Crop offset: monitor 0 = `+0+0`, monitor 1 = `+2240+0` |
-| Coordinate scale | `pcX = (tapX / displayW) * monitorW` |
-| Live stream | `ffmpeg` x11grab → WebSocket → canvas |
+| Single tap | Left click |
+| Long press (500ms) | Right click |
+| Long press + drag | Click and drag |
+| Two-finger swipe up | Scroll up |
+| Two-finger swipe down | Scroll down |
+| Tap on text area | Open custom keyboard |
+
+### FPS / Quality Settings (saved per device)
+```
+Eco      → Polling every 5s (almost no data)
+Balanced → Polling every 1s
+Fast     → Live stream at 10fps
+Ultra    → Live stream at 24fps (strong phone/tablet)
+```
+Saved in `localStorage` so each device remembers its preference.
+The user can change the fps and quality settings (saved per device) from the settings section
+
+### Custom Keyboard
+- Built inside the app (not the phone's native keyboard).
+- Has QWERTY layout + a "Special Keys" row: `Esc`, `Tab`, `Ctrl`,`Alt`, `Alt gr`, `⌘/Win`, `↑↓←→`, `F1–F12` and `Ech`. 
+- Appears as a slide-up panel when the user taps inside a text field on the screen.
+- Has a "type" button or press Enter to send.
+
+### App Switcher (tap "Screen" nav button again)
+- Shows a grid of all open windows (title + icon/emoji per OS).
+- Tap one → backend focuses that window → screen updates to show it.
+
+---
+
+## Device Size Awareness
+
+The frontend reads the device's actual screen size and DPR (device pixel ratio) on load:
+
+```typescript
+const deviceW = window.screen.width * window.devicePixelRatio
+const deviceH = window.screen.height * window.devicePixelRatio
+const isTablet = deviceW >= 1024  // different layout for tablets
+const isMiniPc = deviceW >= 1280  // even wider layout
+```
+
+The screen view container uses `100vw × (100vh - topBar - bottomBar)` so it always fills the available display perfectly, regardless of device.
+
+---
+
+## Files to Create/Modify
+
+| # | File | Action |
+|---|---|---|
+| 1 | `server/src/screen/screen.service.ts` | NEW — OS detection + all commands |
+| 2 | `server/src/screen/screen.routes.ts` | NEW — REST + WebSocket endpoints |
+| 3 | `server/src/index.ts` | MODIFY — register screen routes |
+| 4 | `client/src/app/screen/page.tsx` | NEW — main screen viewer page |
+| 5 | `client/src/components/AppSwitcher.tsx` | NEW — window list modal |
+| 6 | `client/src/components/RemoteKeyboard.tsx` | NEW — custom keyboard |
+| 7 | `client/src/app/dashboard/page.tsx` | MODIFY — add Screen nav button |
+
+**7 files total (5 new, 2 modified).**
