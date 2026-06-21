@@ -1,60 +1,66 @@
-# Ports Explained: 3000 vs 4242
+# Ports Explained: 4000 vs 4242
 
-## Why They Look The Same
+## TL;DR
 
-Both `localhost:3000` and `localhost:4242` show the exact same UI.
+- **Port 4000** = Next.js client (the public gateway). This is what the Cloudflare tunnel points at.
+- **Port 4242** = Fastify backend (API + WebSockets). The client proxies to it.
 
-**But they are NOT the same.** Here is why:
+## Why The Two Ports Look The Same
 
-| Feature | Port 3000 (Frontend only) | Port 4242 (Backend gateway) |
-|---|---|---|
-| Login Page | ✅ | ✅ |
-| Dashboard | ✅ | ✅ |
-| API Calls | ✅ (via Next.js) | ✅ |
-| **Terminal WebSocket** | ❌ BROKEN | ✅ Works |
-| **AI WebSocket** | ❌ BROKEN | ✅ Works |
-| **Cloudflare Tunnel** | ❌ Do not use | ✅ Use this |
+Both `localhost:4000` and `localhost:4242` show the same UI:
 
-Port **3000** is the raw Next.js frontend. WebSockets go to `ws://localhost:3000/ws/...` which doesn't exist there.
+- `localhost:4000` is the Next.js dev server. It rewrites `/api/*`, `/ws/*`, `/proxy/*`, and `/health` to `localhost:4242`, so calls just work.
+- `localhost:4242` is Fastify. It serves the API and WebSockets natively, and proxies any other request to `localhost:4000` so the UI loads there too.
 
-Port **4242** is the Fastify backend. It handles WebSockets *itself*, and proxies the UI from port 3000 in the background. So everything works through one port.
+**But the tunnel must point at 4000.** The client is the proper public entry point in dev:
 
-> **Rule**: Always use port **4242** (locally and via tunnel). Never share port 3000.
+| Feature              | Port 4000 (client) | Port 4242 (backend) |
+|----------------------|--------------------|---------------------|
+| Login page           | ✅                 | ✅                  |
+| Dashboard            | ✅                 | ✅                  |
+| API calls            | ✅ (rewritten)     | ✅ (native)         |
+| Terminal WebSocket   | ✅ (rewritten)     | ✅ (native)         |
+| AI WebSocket         | ✅ (rewritten)     | ✅ (native)         |
+| Cloudflare tunnel    | ✅ Use this        | ❌                  |
+
+> **Rule**: Run the tunnel against **4000**. The server auto-tunnel already does this.
 
 ---
 
 ## Why "Rove Client" Starts Then Immediately Stops
 
-The "Rove Client" project in the dashboard is configured to run `pnpm dev` inside the `/client` folder (port 3000).
+The "Rove Client" project in the dashboard runs `pnpm dev` inside `/client` (port 4000).
 
-When you click "Start", it works. But when port 3000 is **already in use**, the command crashes immediately.
+If port 4000 is **already in use** (e.g. you already ran `pnpm dev:client` in a terminal), the dashboard-managed copy will exit instantly.
 
-**Most likely reason**: You already ran `pnpm dev:client` in a terminal, so port 3000 is taken. When the project tries to start again, it sees the port is busy and exits.
-
-**To fix this, either:**
-1. Let Rove manage it (don't run `pnpm dev:client` manually in a terminal).
-2. Or kill the existing process first:
+**Fix**:
+1. Let Rove manage it (don't run `pnpm dev:client` manually), or
+2. Kill the existing process first:
    ```bash
-   fuser -k 3000/tcp
+   fuser -k 4000/tcp
    ```
    Then click Start in the dashboard.
 
 ---
 
-## The Correct Way to Start Everything
+## The Correct Way To Start Everything
 
 ```bash
-# Terminal 1 - Backend
+# Terminal 1 - Backend (also auto-starts the cloudflared tunnel pointing at 4000)
 pnpm dev:server
 
 # Terminal 2 - Frontend
 pnpm dev:client
-
-# Terminal 3 - Tunnel (for remote access)
-cloudflared tunnel --url http://localhost:4242
 ```
 
-Or use the single combined command:
+Or use the combined command:
+
 ```bash
 pnpm dev
+```
+
+If you want to run the tunnel manually instead of via the auto-tunnel:
+
+```bash
+cloudflared tunnel --url http://localhost:4000
 ```

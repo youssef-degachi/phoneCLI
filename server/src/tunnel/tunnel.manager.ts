@@ -17,10 +17,14 @@ let startTime = 0;
 
 const logFile = path.resolve(process.cwd(), '../tunnel.log');
 
+// The tunnel must point at the Next.js client (UI gateway), which proxies
+// /api/*, /ws/*, /proxy/*, and /health back to the backend on env.PORT.
+const TUNNEL_TARGET_PORT = Number(process.env.TUNNEL_TARGET_PORT) || 4000;
+
 export const startTunnel = () => {
     if (tunnelProcess) return;
 
-    const args = ['tunnel', '--url', `http://localhost:${env.PORT}`];
+    const args = ['tunnel', '--url', `http://localhost:${TUNNEL_TARGET_PORT}`];
     if (env.CLOUDFLARE_TUNNEL_TOKEN) {
         args.push('run', '--token', env.CLOUDFLARE_TUNNEL_TOKEN);
     }

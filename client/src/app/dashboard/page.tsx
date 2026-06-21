@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
-import { Terminal, Settings, Layout, Search, Activity, Cpu, HardDrive } from 'lucide-react';
+import { Terminal, Settings, Layout, Search, Activity, Cpu, HardDrive, Globe } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DashboardPage() {
@@ -117,14 +117,20 @@ export default function DashboardPage() {
                         <Terminal className="h-6 w-6" />
                         <span className="text-[10px] uppercase font-bold">Term</span>
                     </Link>
-                    <Link href="/ai" className="flex flex-col items-center space-y-1 hover:text-white transition-colors">
+                    <Link href="/run-host" className="flex flex-col items-center space-y-1 hover:text-white transition-colors">
+                        <Globe className="h-6 w-6" />
+                        <span className="text-[10px] uppercase font-bold">Run Host</span>
+                    </Link>
+                    {/* Hidden for now — uncomment to re-enable AI assistant nav */}
+                    {/* <Link href="/ai" className="flex flex-col items-center space-y-1 hover:text-white transition-colors">
                         <BotIcon className="h-6 w-6" />
                         <span className="text-[10px] uppercase font-bold">AI</span>
-                    </Link>
-                    <Link href="/files" className="flex flex-col items-center space-y-1 hover:text-white transition-colors">
+                    </Link> */}
+                    {/* Hidden for now — uncomment to re-enable Files nav */}
+                    {/* <Link href="/files" className="flex flex-col items-center space-y-1 hover:text-white transition-colors">
                         <Search className="h-6 w-6" />
                         <span className="text-[10px] uppercase font-bold">Files</span>
-                    </Link>
+                    </Link> */}
                     <Link href="/settings" className="flex flex-col items-center space-y-1 hover:text-white transition-colors">
                         <Settings className="h-6 w-6" />
                         <span className="text-[10px] uppercase font-bold">Config</span>

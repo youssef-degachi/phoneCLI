@@ -16,10 +16,10 @@ The frontend is a mobile-first Progressive Web App (PWA) built for speed and res
 
 ### 3. The Unified Architecture
 To simplify remote access, Rove uses a **Consolidated Proxy**:
--   The backend (port 4242) acts as the main gateway.
--   It handles all API and WebSocket requests natively.
--   Any non-API request is automatically proxied to the frontend (port 3000).
--   This allows you to expose the entire stack through a **single Cloudflare Tunnel URL** on port 4242.
+-   The Next.js client (port 4000) is the public gateway.
+-   It serves the UI directly and forwards `/api/*`, `/ws/*`, `/proxy/*`, and `/health` to the backend (port 4242) via Next.js dev-server rewrites.
+-   The backend (port 4242) handles all API and WebSocket logic and can also be hit directly during development.
+-   This allows you to expose the entire stack through a **single Cloudflare Tunnel URL** on port 4000.
 
 ### 4. Remote Connectivity
 By running a Cloudflare Tunnel (`cloudflared`), your local port 4242 is mapped to a secure, public HTTPS URL. This allows you to access Rove from any network in the world without exposing your PC directly to the internet.

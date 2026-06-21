@@ -17,17 +17,25 @@ export async function terminalWs(fastify: FastifyInstance) {
         }
 
         let session = getSession(sessionId);
+        const isNew = !session;
         if (!session) {
             session = createSession(sessionId);
         }
 
         const { pty } = session;
 
-        // Send PTY output to client
+        // Replay scrollback so the user sees what happened while disconnected.
+        if (!isNew && session.buffer.length > 0) {
+            socket.send(JSON.stringify({ type: 'output', data: session.buffer.join('') }));
+        }
+
+        // Live PTY output → this client. The manager already buffers in parallel.
         const onData = (data: string) => {
-            socket.send(JSON.stringify({ type: 'output', data }));
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'output', data }));
+            }
         };
-        pty.onData(onData);
+        const dataDisposable = pty.onData(onData);
 
         const onExit = (event: { exitCode: number; signal?: number }) => {
             if (socket.readyState === WebSocket.OPEN) {
@@ -36,7 +44,7 @@ export async function terminalWs(fastify: FastifyInstance) {
             }
             destroySession(sessionId);
         };
-        pty.onExit(onExit);
+        const exitDisposable = pty.onExit(onExit);
 
         // Handle client input
         socket.on('message', (message) => {
@@ -54,10 +62,9 @@ export async function terminalWs(fastify: FastifyInstance) {
         });
 
         socket.on('close', () => {
-            // In v1, we keep the session alive for 30 mins to allow reconnect
-            // But we remove the listeners from the PTY for this specific socket
-            pty.removeListener('data', onData);
-            pty.removeListener('exit', onExit);
+            // Keep the PTY alive for reconnect; just detach this socket's listeners.
+            dataDisposable.dispose();
+            exitDisposable.dispose();
         });
     });
 }

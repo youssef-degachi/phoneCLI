@@ -1,4 +1,4 @@
-// File: /home/youssef/youssef/project/contrall-pc-from-mobile/client/src/app/dashboard/page.tsx
+// File: /home/youssef/youssef/my-project/nomad-rellay/client/src/app/dashboard/page.tsx
 import * as entry from '../../../../src/app/dashboard/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

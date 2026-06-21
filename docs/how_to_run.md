@@ -55,8 +55,27 @@ pnpm dev:client
 ```
 
 ### 5. Exposing for Remote Access
-To access the app from your phone or a different network, start a Cloudflare Tunnel pointing to the **backend port (4242)**:
-```bash
-cloudflared tunnel --url http://localhost:4242
+The Cloudflare quick tunnel runs alongside the Next.js client (port 4000), so it auto-starts when you run `pnpm dev:client`. Watch the client terminal for:
+
 ```
-*Note: Pointing to 4242 ensures that the UI, API, and WebSockets all work correctly through a single URL.*
+📡 Tunnel live at: https://xxxxx.trycloudflare.com
+```
+
+The client (port 4000) is the public gateway. It forwards:
+
+- `/api/*` → backend on port 4242
+- `/ws/*`  → backend on port 4242 (WebSockets)
+- `/proxy/*` → backend on port 4242
+- everything else → served by Next.js itself (the UI)
+
+Useful overrides (set in `.env`):
+
+- `TUNNEL_TARGET_PORT` – change which local port the tunnel exposes (default `4000`)
+- `TUNNEL_AUTO_RESTART=false` – disable the watchdog
+- `CLOUDFLARE_TUNNEL_TOKEN` – use a named tunnel instead of a quick tunnel
+
+Prefer to manage the tunnel yourself? Run `pnpm --filter client dev:next` to start Next.js without the tunnel, then in a separate terminal:
+
+```bash
+cloudflared tunnel --url http://localhost:4000
+```

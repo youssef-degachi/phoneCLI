@@ -7,9 +7,9 @@ import { env } from './config.js';
 import { authRoutes } from './auth/auth.routes.js';
 import { verifyToken } from './auth/auth.service.js';
 import { terminalWs } from './terminal/terminal.ws.js';
+import { terminalRoutes } from './terminal/terminal.routes.js';
 import websocket from '@fastify/websocket';
 import { tunnelRoutes } from './tunnel/tunnel.routes.js';
-import { startTunnel } from './tunnel/tunnel.manager.js';
 import { projectRoutes } from './projects/projects.routes.js';
 import { logsWs } from './logs/logs.ws.js';
 import { fileRoutes } from './files/files.routes.js';
@@ -40,8 +40,8 @@ fastify.register(cors, {
 fastify.register(cookie);
 fastify.register(websocket);
 
-// reply-from for UI proxy
-fastify.register(replyFrom, { base: 'http://localhost:3000' });
+// reply-from for UI proxy (forwards to Next.js client on port 4000)
+fastify.register(replyFrom, { base: 'http://localhost:4000' });
 
 // JWT Middleware — only protect /api/* routes
 fastify.addHook('preHandler', async (request, reply) => {
@@ -60,6 +60,7 @@ fastify.addHook('preHandler', async (request, reply) => {
 // API + WebSocket routes
 fastify.register(authRoutes, { prefix: '/api/auth' });
 fastify.register(terminalWs);
+fastify.register(terminalRoutes, { prefix: '/api/terminals' });
 fastify.register(tunnelRoutes, { prefix: '/api/tunnel' });
 fastify.register(projectRoutes, { prefix: '/api/projects' });
 fastify.register(logsWs);
@@ -73,7 +74,7 @@ fastify.get('/health', async () => ({
     ok: true, version: '1.0.0', timestamp: new Date().toISOString()
 }));
 
-// Catch-all: forward everything else to Next.js client on port 3000
+// Catch-all: forward everything else to Next.js client on port 4000
 const uiHandler = async (request: any, reply: any) => {
     return reply.from(request.url);
 };
@@ -89,7 +90,6 @@ const start = async () => {
     try {
         await fastify.listen({ port: env.PORT, host: env.HOST });
         fastify.log.info(`🚀 Rove server listening on ${env.HOST}:${env.PORT}`);
-        startTunnel();
     } catch (err) {
         fastify.log.error(err);
         process.exit(1);
