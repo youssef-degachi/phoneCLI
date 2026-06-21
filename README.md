@@ -49,8 +49,8 @@ The project is a pnpm monorepo:
 ## Setup
 
 ```bash
-git clone <repo-url>
-cd nomad-rellay
+git clone git@github.com:youssef-degachi/phoneCLI.git
+cd phoneCLI
 pnpm install
 cp .env.example .env
 cp rove.config.json.example rove.config.json
